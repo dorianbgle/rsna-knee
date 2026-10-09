@@ -488,3 +488,114 @@ def load_sampled_series(
         images,
         axis=0,
     )
+
+def select_window_centers(
+    length: int,
+    count: int = 8,
+) -> np.ndarray:
+    """
+    Choose evenly spaced centre slices for 2.5D windows.
+
+    Each centre will later use:
+        previous slice
+        centre slice
+        next slice
+    """
+    if length <= 0:
+        raise ValueError("Series contains no slices.")
+
+    if count <= 0:
+        raise ValueError("count must be > 0.")
+
+    if length == 1:
+        return np.zeros(count, dtype=np.int64)
+
+    if length == 2:
+        return np.linspace(
+            0,
+            1,
+            count,
+        ).round().astype(np.int64)
+
+    return np.linspace(
+        1,
+        length - 2,
+        count,
+    ).round().astype(np.int64)
+
+
+def load_2p5d_windows(
+    image_root: Path,
+    study_uid: str,
+    series_uid: str,
+    num_windows: int = 8,
+) -> list[list[np.ndarray]]:
+    """
+    Load true adjacent-slice 2.5D windows.
+
+    Returns:
+        [
+            [previous, centre, next],
+            ...
+        ]
+
+    with num_windows windows.
+    """
+    series_dir = get_series_directory(
+        image_root=image_root,
+        study_uid=study_uid,
+        series_uid=series_uid,
+    )
+
+    files = sort_dicom_files(
+        list_dicom_files(series_dir)
+    )
+
+    if not files:
+        raise RuntimeError(
+            f"No DICOM files found in {series_dir}"
+        )
+
+    centers = select_window_centers(
+        length=len(files),
+        count=num_windows,
+    )
+
+    required_indices = set()
+
+    window_indices = []
+
+    for center in centers:
+        previous = max(0, int(center) - 1)
+        current = int(center)
+        following = min(
+            len(files) - 1,
+            int(center) + 1,
+        )
+
+        indices = [
+            previous,
+            current,
+            following,
+        ]
+
+        window_indices.append(indices)
+        required_indices.update(indices)
+
+    # Avoid decoding the same DICOM more than once.
+    cache = {
+        index: load_slice(files[index])
+        for index in sorted(required_indices)
+    }
+
+    windows = []
+
+    for indices in window_indices:
+        windows.append(
+            [
+                cache[index]
+                for index in indices
+            ]
+        )
+
+    return windows
