@@ -1,0 +1,11 @@
+numpy
+pandas
+scikit-learn
+pydicom
+opencv-python-headless
+torch
+torchvision
+timm
+albumentations
+tqdm
+matplotlib
